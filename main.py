@@ -2,9 +2,9 @@ import asyncio
 import html
 import logging
 import random
-import os  # Қўшилди
+import os
 
-from aiohttp import web  # Қўшилди
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatType
@@ -21,29 +21,16 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-# Сизнинг конфиг ва база функцияларингиз
 from config import TOKEN, CHANNEL_LINK, PORTFOLIO_LINK, ADMIN_USERNAME, ADMIN_REVIEW_CHAT_ID, OWNER_ID
 from db import * 
 
-# 1. МУҲИМ: Dispatcher ва Bot ни шу ерда, функциялардан ТАШҚАРИДА эълон қиламиз
+# Бот ва Диспатчерни битта қилиб эълон қиламиз
 storage = MemoryStorage()
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=storage)
 
-# Шу ердан пастга қараб сизнинг @dp.message handler'ларингиз бошланади...
-
 logging.basicConfig(level=logging.INFO)
 
-if not TOKEN:
-    raise RuntimeError("BOT_TOKEN topilmadi. .env faylga yozing.")
-if not OWNER_ID:
-    raise RuntimeError("OWNER_ID topilmadi. .env faylga yozing.")
-if not ADMIN_REVIEW_CHAT_ID:
-    raise RuntimeError("ADMIN_REVIEW_CHAT_ID topilmadi. .env faylga yozing.")
-
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher(storage=MemoryStorage())
-broadcast_targets_mode: dict[int, str] = {}
 
 
 class OrderForm(StatesGroup):
@@ -1305,12 +1292,34 @@ async def fallback_handler(message: Message):
     await message.answer("Kerakli bo‘limni tugmalar orqali tanlang 👇", reply_markup=main_menu_kb(message.from_user.id))
 
 
+# --- RENDER УЧУН ВЕБ-СЕРВЕР ---
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# --- АСОСИЙ ИШГА ТУШИРИШ ---
 async def main():
+    # ДИҚҚАТ: await керак эмас!
     init_db(OWNER_ID)
-    await start_web_server() # Юқорида берган веб-сервер функциям
+
+    # Веб-серверни ишга тушириш
+    await start_web_server()
+
+    # Ботни ишга тушириш
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
